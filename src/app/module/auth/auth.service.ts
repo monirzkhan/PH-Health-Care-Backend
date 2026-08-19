@@ -96,6 +96,10 @@ const loginUser = async (payload: ILoginUserPayload) => {
 		throw new Error("User is deleted");
 	}
 
+	if(user.password === null && user.googleId !== null){
+		throw new Error("User Already has account with Google. Please try to login with google")
+	}
+
 	const isPasswordMatched = await bcrypt.compare(
 		password,
 		user.password as string,
@@ -200,13 +204,17 @@ const refreshToken = async (token: string) => {
 };
 
 const googleLogin = async (payload: IGoogleLoginPayload) => {
+
 	let googleIdTokenPayload: TokenPayload | undefined | null = null;
+
 	try {
 		const ticket = await googleClient.verifyIdToken({
 			idToken: payload.idToken,
 			audience: config.google_client_id,
 		});
+
 		googleIdTokenPayload = ticket.getPayload();
+
 	} catch (error) {
 		console.log("Google ID Token Verification Failed", error);
 		throw new Error("Invalid Or Expired Google Id Token");
