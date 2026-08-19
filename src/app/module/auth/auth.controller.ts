@@ -4,29 +4,16 @@ import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import type { IRequestUser } from "./auth.interface";
 import { AuthService } from "./auth.service";
-import z from "zod";
+import { patientValidation } from "./auth.validation";
 
-const PatientRegistrationZodSchema=z.object({
-	name: z.string(),
-	email: z.email(),
-	password: z.string()
-	.min(6)
-	.refine((val) => /[A-Z]/.test(val), "Add at least one uppercase letter")
-    .refine((val) => /[a-z]/.test(val), "Add at least one lowercase letter")
-	.refine((val) => /[^A-Za-z0-9]/.test(val), "Needs special char")
-    .refine((val) => /[0-9]/.test(val), "Add at least one number"),
-	patient:z.object({
-		
-		contactNumber: z.string().optional()
-	}).optional()
 
-})
+
 
 const registerPatient = catchAsync(async (req: Request, res: Response) => {
-	const payload = PatientRegistrationZodSchema.safeParse(req.body);
+	const payload = patientValidation.PatientRegistrationZodSchema.safeParse(req.body);
 
 	if(!payload.success){
-		throw new Error(payload.error.message)
+		throw new Error(payload.error.issues[0].message)
 	}
 	const result = await AuthService.registerPatient(payload.data);
 
