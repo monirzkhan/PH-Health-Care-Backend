@@ -31,33 +31,29 @@ app.use(cookieParser());
 
 app.use("/api/v1/auth", AuthRoutes);
 
-
 //Zod Check
-app.use("/zod", async (req: Request, res: Response, next:NextFunction) => {
+app.use("/zod", async (req: Request, res: Response, next: NextFunction) => {
 	try {
-
-		const UserZodSchema= z.object({
+		const UserZodSchema = z.object({
 			name: z.string(),
 			email: z.email(),
 			age: z.number().optional(),
 			isVarified: z.boolean().optional(),
-			books: z.array(z.string()).optional()
+			books: z.array(z.string()).optional(),
+		});
 
-		})
-
-		const payload= req.body;
-		const result=UserZodSchema.parse(payload);
+		const payload = req.body;
+		const result = UserZodSchema.safeParse(payload);
 		console.log(result);
 
 		res.status(httpStatus.OK).json({
-		success: true,
-		message: "Welcome to PH Healthcare System Backend",
-		data: result
-	});
+			success: true,
+			message: "Welcome to PH Healthcare System Backend",
+			data: result,
+		});
 	} catch (error) {
 		console.log(error);
-		next(error)
-		
+		next(error);
 	}
 });
 
