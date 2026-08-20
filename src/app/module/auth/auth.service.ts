@@ -18,9 +18,6 @@ import type {
 import { googleClient } from "../../lib/googleAuth";
 import { TokenPayload } from "google-auth-library";
 
-
-
-
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password, patient: patientData } = payload;
 	const email = payload.email.trim().toLowerCase();
@@ -44,10 +41,11 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 			status: UserStatus.ACTIVE,
 			emailVerified: false,
 			patient: {
-				create: { name, 
-					email, 
-					
-					contactNumber:patientData.contactNumber 
+				create: {
+					name,
+					email,
+
+					contactNumber: patientData.contactNumber,
 				},
 			},
 		},
