@@ -22,6 +22,11 @@ import { TokenPayload } from "google-auth-library";
 import { error } from "console";
 import crypto from "crypto";
 import { redisClient } from "../../lib/redis";
+import { transporter } from "../../lib/nodemailer";
+import {
+	sentOTPEmailTemplate,
+	sentPasswordChangedEmailTemplate,
+} from "../../utils/emailTemplate";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password, patient: patientData } = payload;
@@ -371,6 +376,16 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
 			value: 5 * 60,
 		},
 	});
+
+	await transporter.sendMail({
+		from: `"PH Healthcare"<${config.smtp_sender}>`,
+		to: isUserExist.email,
+		subject: "Forgot Password OTP",
+		html: sentOTPEmailTemplate({
+			name: isUserExist.name,
+			otp,
+		}),
+	});
 };
 const resetPassword = async (payload: IResetPasswordPayload) => {
 	const { email, newPassword, otp } = payload;
@@ -421,6 +436,12 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 		},
 	});
 	await redisClient.del([key]);
+	await transporter.sendMail({
+		from: `"PH Healthcare"<${config.smtp_sender}>`,
+		to: isUserExist.email,
+		subject: "Changed Password",
+		html: sentPasswordChangedEmailTemplate({ name: isUserExist.name }),
+	});
 };
 
 export const AuthService = {
