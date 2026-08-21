@@ -165,7 +165,7 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
 	sendResponse(res, {
 		statusCode: httpStatus.OK,
 		success: true,
-		message: "OTP sent Successfully",
+		message: "Password has been changed Successfully",
 		data: {},
 	});
 });

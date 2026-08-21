@@ -24,8 +24,20 @@ router.get(
 	auth(Role.ADMIN, Role.DOCTOR, Role.PATIENT, Role.SUPER_ADMIN),
 	AuthController.getMe,
 );
+
 router.post("/refresh-token", AuthController.refreshToken);
 router.post("/google", AuthController.googleLogin);
-router.post("/forgot-password", AuthController.forgotPassword);
-router.post("/reser-password", AuthController.resetPassword);
+
+router.post(
+	"/forgot-password",
+	zoDvalidation(userValidation.forgotPasswordZodSchema),
+	AuthController.forgotPassword,
+);
+
+router.post(
+	"/reset-password",
+	zoDvalidation(userValidation.resetPasswordZodSchema),
+	AuthController.resetPassword,
+);
+
 export const AuthRoutes = router;
