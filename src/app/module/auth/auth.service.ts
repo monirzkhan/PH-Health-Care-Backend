@@ -13,9 +13,11 @@ import type {
 	IForgotPasswordPayload,
 	IGoogleLoginPayload,
 	ILoginUserPayload,
+	IRedisRegisterPatientPayload,
 	IRegisterPatientPayload,
 	IRequestUser,
 	IResetPasswordPayload,
+	IVerifyEmailPayload,
 } from "./auth.interface";
 import { googleClient } from "../../lib/googleAuth";
 import { TokenPayload } from "google-auth-library";
@@ -29,8 +31,9 @@ import {
 } from "../../utils/emailTemplate";
 import path from "path";
 import ejs from "ejs";
+import { number } from "zod";
 
-const registerPatient = async (payload: IRegisterPatientPayload) => {
+const registerPatient = async (payload: IRedisRegisterPatientPayload) => {
 	const { name, password, patient: patientData } = payload;
 	const email = payload.email.trim().toLowerCase();
 
@@ -42,22 +45,108 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		throw new Error("User with this email already exists");
 	}
 
-	const hashedPassword = await bcrypt.hash(password, 8);
+	const hashedPassword = await bcrypt.hash(
+		password,
+		Number(config.bcrypt_salt_rounds),
+	);
 
+	const emailOTP = crypto.randomInt(100000, 1000000);
+	const emailKey = `Patient-Registration-OTP:${email}`;
+	const expirationSeconds = 60 * 5;
+
+	await redisClient.set(emailKey, emailOTP, {
+		expiration: {
+			type: "EX",
+			value: expirationSeconds,
+		},
+	});
+
+	const redisDataPayload = {
+		name,
+		email,
+		password: hashedPassword,
+		patient: patientData,
+	};
+	const redisDataKey = `Patient-Registration-Data:${email}`;
+
+	await redisClient.set(redisDataKey, JSON.stringify(redisDataPayload), {
+		expiration: {
+			type: "EX",
+			value: expirationSeconds,
+		},
+	});
+
+	const templatePath = path.join(
+		process.cwd(),
+		"/src/app/templates/registation-verification.ejs",
+	);
+	const templateData = {
+		name,
+		otp: emailOTP,
+		expirationTime: expirationSeconds / 60,
+	};
+
+	const html = await ejs.renderFile(templatePath, templateData);
+	await transporter.sendMail({
+		from: `"PH Healthcare" <${config.smtp_sender}>`,
+		to: email,
+		subject: "Verify Your Email for Registration",
+		html,
+	});
+};
+
+const verifyEmail = async (payload: IVerifyEmailPayload) => {
+	const otp = payload.otp;
+	const email = payload.email.trim().toLowerCase();
+
+	const isUserExist = await prisma.user.findUnique({
+		where: {
+			email,
+		},
+	});
+
+	if (isUserExist?.status === "BLOCKED") {
+		throw new Error("User is Blocked");
+	}
+	if (isUserExist?.emailVerified) {
+		throw new Error("User is already varified");
+	}
+	if (isUserExist?.isDeleted && isUserExist.status === "DELETED") {
+		throw new Error("User is Deleted");
+	}
+
+	const emailOTPKey = `Patient-Registration-OTP:${email}`;
+
+	const redisOTP = await redisClient.get(emailOTPKey);
+	if (!redisOTP) {
+		throw new Error("OTP not found");
+	}
+	if (redisOTP !== otp) {
+		throw new Error("OTP does not match");
+	}
+	await redisClient.del([emailOTPKey]);
+
+	const redisDataKey = `Patient-Registration-Data:${email}`;
+	const redisDataPayload = await redisClient.get(redisDataKey);
+	if (!redisDataPayload) {
+		throw new Error("User data not found in Redis");
+	}
+
+	const patientDataPalyload: IRedisRegisterPatientPayload =
+		JSON.parse(redisDataPayload);
 	const createdUser = await prisma.user.create({
 		data: {
-			name,
-			email,
-			password: hashedPassword,
+			name: patientDataPalyload.name,
+			email: patientDataPalyload.email,
+			password: patientDataPalyload.password,
 			role: Role.PATIENT,
 			status: UserStatus.ACTIVE,
-			emailVerified: false,
+			emailVerified: true,
 			patient: {
 				create: {
-					name,
-					email,
-
-					contactNumber: patientData.contactNumber,
+					name: patientDataPalyload.name,
+					email: patientDataPalyload.email,
+					contactNumber: patientDataPalyload.patient.contactNumber,
 				},
 			},
 		},
@@ -84,6 +173,24 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		config.jwt_refresh_secret,
 		config.jwt_refresh_expires_in as SignOptions,
 	);
+	const templatePath = path.join(
+		process.cwd(),
+		"/src/app/templates/welcome-email.ejs",
+	);
+	const templateData = {
+		name: patientDataPalyload.name,
+		email: patientDataPalyload.email,
+		loginUrl: "localhost:5000/login",
+	};
+
+	const html = await ejs.renderFile(templatePath, templateData);
+	await transporter.sendMail({
+		from: `"PH Healthcare" <${config.smtp_sender}>`,
+		to: email,
+		subject: "Welcome! Registration Complete",
+		html,
+	});
+	await redisClient.del([redisDataKey]);
 
 	return {
 		user,
@@ -92,7 +199,6 @@ const registerPatient = async (payload: IRegisterPatientPayload) => {
 		refreshToken,
 	};
 };
-
 const loginUser = async (payload: ILoginUserPayload) => {
 	const { password } = payload;
 	const email = payload.email.trim().toLowerCase();
@@ -460,6 +566,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 
 export const AuthService = {
 	registerPatient,
+	verifyEmail,
 	loginUser,
 	getMe,
 	refreshToken,
