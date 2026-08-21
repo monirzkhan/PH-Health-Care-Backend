@@ -27,6 +27,8 @@ import {
 	sentOTPEmailTemplate,
 	sentPasswordChangedEmailTemplate,
 } from "../../utils/emailTemplate";
+import path from "path";
+import ejs from "ejs";
 
 const registerPatient = async (payload: IRegisterPatientPayload) => {
 	const { name, password, patient: patientData } = payload;
@@ -369,22 +371,33 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
 
 	const otp = crypto.randomInt(100000, 1000000);
 	const key = `Forgot-Password-OTP: ${isUserExist.email}`;
+	const expirationSeconds = 5 * 60;
 
 	await redisClient.set(key, otp, {
 		expiration: {
 			type: "EX",
-			value: 5 * 60,
+			value: expirationSeconds,
 		},
 	});
+
+	//Send Email Template using EJS
+	const templatePath = path.join(
+		process.cwd(),
+		"/src/app/templates/forgot-password.ejs",
+	);
+	const templateData = {
+		name: isUserExist.name,
+		otp,
+		expirationTime: expirationSeconds / 60,
+	};
+
+	const html = await ejs.renderFile(templatePath, templateData);
 
 	await transporter.sendMail({
 		from: `"PH Healthcare"<${config.smtp_sender}>`,
 		to: isUserExist.email,
-		subject: "Forgot Password OTP",
-		html: sentOTPEmailTemplate({
-			name: isUserExist.name,
-			otp,
-		}),
+		subject: "Forgot Password",
+		html,
 	});
 };
 const resetPassword = async (payload: IResetPasswordPayload) => {
@@ -436,6 +449,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
 		},
 	});
 	await redisClient.del([key]);
+	//Send Email Template using Raw HTML
 	await transporter.sendMail({
 		from: `"PH Healthcare"<${config.smtp_sender}>`,
 		to: isUserExist.email,
