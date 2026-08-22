@@ -134,6 +134,7 @@ const verifyEmail = async (payload: IVerifyEmailPayload) => {
 
 	const patientDataPalyload: IRedisRegisterPatientPayload =
 		JSON.parse(redisDataPayload);
+
 	const createdUser = await prisma.user.create({
 		data: {
 			name: patientDataPalyload.name,
@@ -180,7 +181,7 @@ const verifyEmail = async (payload: IVerifyEmailPayload) => {
 	const templateData = {
 		name: patientDataPalyload.name,
 		email: patientDataPalyload.email,
-		loginUrl: "localhost:5000/login",
+		loginUrl: "https://localhost:5000/login",
 	};
 
 	const html = await ejs.renderFile(templatePath, templateData);
